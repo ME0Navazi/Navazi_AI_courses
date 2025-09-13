@@ -1,0 +1,164 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.io
+
+def compute_fft(input_signal, sample_rate):
+    length = len(input_signal)
+    frequencies = np.fft.fftfreq(length, d=1/sample_rate)
+    fft_vals = np.fft.fft(input_signal)
+    magnitude = np.abs(fft_vals)
+    return magnitude, frequencies
+
+def signal_statistics(input_signal):
+    mean_val = np.mean(input_signal)
+    std_val = np.std(input_signal)
+    rms_val = np.sqrt(np.mean(input_signal**2))
+    return mean_val, std_val, rms_val
+
+mat_contents = scipy.io.loadmat("111.mat")
+print("Variables in .mat file:", mat_contents.keys())
+raw_signal = mat_contents["X111_DE_time"].squeeze()
+
+sampling_rate = 48000
+time_vals = np.arange(0, len(raw_signal)) / sampling_rate
+start_sec = 2.00
+end_sec = 2.01
+start_idx = int(start_sec * sampling_rate)
+end_idx = int(end_sec * sampling_rate)
+time_slice = time_vals[start_idx:end_idx]
+signal_slice = raw_signal[start_idx:end_idx]
+df_slice = pd.DataFrame({"Time (s)": time_slice, "Amplitude": signal_slice})
+
+plt.figure(figsize=(10, 5))
+plt.plot(time_slice, signal_slice, label="X111_DE_time (2s - 2.01s)", color="b")
+plt.xlabel("Time (s)")
+plt.ylabel("Amplitude")
+plt.title("Segmented Signal")
+plt.legend()
+plt.grid()
+plt.show()
+
+fft_magnitude, fft_freqs = compute_fft(raw_signal, sampling_rate)
+fft_dataframe = pd.DataFrame({'Frequency (Hz)': fft_freqs, 'Magnitude': fft_magnitude})
+N = len(fft_freqs)
+plt.figure(figsize=(10, 5))
+plt.plot(fft_freqs[:N], fft_magnitude[:N], color="b")
+plt.xlabel("Frequency (Hz)")
+plt.ylabel("Magnitude")
+plt.title("FFT of Signal")
+plt.grid()
+plt.show()
+
+dominant_idx = np.argmax(fft_magnitude)
+dominant_frequency = fft_freqs[dominant_idx]
+print("Dominant Frequency:", dominant_frequency)
+
+num_blocks = len(fft_magnitude) // 128
+fft_blocks = fft_magnitude[:num_blocks * 128].reshape(num_blocks, 128)
+print("Shape of FFT blocks:", fft_blocks.shape)
+print("First 3 blocks:\n", fft_blocks[:3])
+
+fft_blocks_df = pd.DataFrame(fft_blocks)
+plt.figure(figsize=(12, 7))
+plot_count = 0
+for i in range(len(fft_dataframe)):
+    if i % 13 == 0:
+        plt.plot(fft_blocks_df.iloc[i], label=f'Block {i}') 
+        plot_count += 1
+        if plot_count == 10:
+            break
+plt.xlabel('Sample Index')
+plt.ylabel('Magnitude')
+plt.title('Plot of 10 FFT Blocks (Divisible by 13)')
+plt.legend(loc='upper right')
+plt.grid(True)
+plt.show()
+
+mean_sig, std_sig, rms_sig = signal_statistics(raw_signal)
+mean_fft, std_fft, rms_fft = signal_statistics(fft_magnitude)
+stats_summary = pd.DataFrame({
+    'Mean': [mean_sig, mean_fft],
+    'StdDev': [std_sig, std_fft],
+    'RMS': [rms_sig, rms_fft]
+})
+print(stats_summary)
+
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
+import seaborn as sns
+
+iris_data = load_iris()
+iris_df = pd.DataFrame(iris_data.data, columns=["Sepal_Len", "Sepal_Wid", "Petal_Len", "Petal_Wid"])
+iris_df["Category"] = iris_data.target
+iris_df["Category"] = iris_df["Category"].map({0: "Setosa", 1: "Versicolor", 2: "Virginica"})
+print("First rows of Iris dataset:")
+print(iris_df.head())
+
+train_data, test_data = train_test_split(iris_df, test_size=0.2, random_state=42, stratify=iris_df["Category"])
+train_data = train_data.copy()
+test_data = test_data.copy()
+train_data["Dataset"] = "Train"
+test_data["Dataset"] = "Test"
+combined_df = pd.concat([train_data, test_data], axis=0).reset_index(drop=True)
+print("Combined DataFrame:")
+print(combined_df.tail(50))
+
+x_feature = "Sepal_Len"
+y_feature = "Petal_Len"
+plt.figure(figsize=(10, 7))
+for category, group in iris_df.groupby("Category"):
+    plt.scatter(group[x_feature], group[y_feature], label=category, s=50, alpha=0.7)
+plt.xlabel(x_feature)
+plt.ylabel(y_feature)
+plt.title(f"Scatter of {x_feature} vs {y_feature}")
+plt.legend(title="Category")
+plt.grid(True)
+plt.show()
+
+z_feature = "Petal_Wid"
+fig = plt.figure(figsize=(12, 8))
+ax = fig.add_subplot(111, projection='3d')
+for category, group in iris_df.groupby("Category"):
+    ax.scatter(group[x_feature], group[y_feature], group[z_feature], label=category, s=50, alpha=0.7)
+ax.set_xlabel(x_feature)
+ax.set_ylabel(y_feature)
+ax.set_zlabel(z_feature)
+ax.set_title(f"3D Scatter: {x_feature}, {y_feature}, {z_feature}")
+ax.legend(title="Category")
+plt.show()
+
+feature_list = ["Sepal_Len", "Sepal_Wid", "Petal_Len", "Petal_Wid"]
+for feature in feature_list:
+    plt.figure(figsize=(10, 6))
+    sns.kdeplot(train_data[feature], fill=True, label='Train', alpha=0.5, color='b')
+    sns.kdeplot(test_data[feature], fill=True, label='Test', alpha=0.5, color='r')
+    plt.xlabel(feature)
+    plt.ylabel("Density")
+    plt.title(f"PDF of {feature}")
+    plt.legend(title="Dataset")
+    plt.grid(True)
+    plt.show()
+
+for feature in feature_list:
+    plt.figure(figsize=(10, 6))
+    plt.hist(train_data[feature], bins=30, density=True, alpha=0.5, color='b', label='Train', edgecolor='black')
+    plt.hist(test_data[feature], bins=30, density=True, alpha=0.5, color='r', label='Test', edgecolor='black')
+    plt.xlabel(feature)
+    plt.ylabel("Density")
+    plt.title(f"PDF of {feature}")
+    plt.legend(title="Dataset")
+    plt.grid(True)
+    plt.show()
+
+feature_to_bin = "Petal_Len"
+bins_def = [0, 2.5, 4.5, 7.0]
+labels_def = ["Short", "Medium", "Long"]
+iris_df["Petal_Len_Class"] = pd.cut(iris_df[feature_to_bin], bins=bins_def, labels=labels_def)
+print(iris_df[[feature_to_bin, "Petal_Len_Class"]])
+
+setosa_only = iris_df[iris_df["Category"] == "Setosa"]
+setosa_stats = setosa_only.describe()
+print("Setosa Statistical Summary:")
+print(setosa_stats)
+
